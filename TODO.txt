@@ -1,0 +1,101 @@
+Project TODO: LLM Robot Navigation
+
+- Phase 0: Setup
+    - Define: Project goals & success metrics.
+    - Select: Tech stack (Python, LLM, Streamlit, ROS, Sim).
+    - Setup: Development environment & Git.
+    - Configure: Secure OpenAI API access.
+
+- Phase 1: Core Logic & Web Interface
+    - Connect: Implement GPT API connection function.
+    - Describe: Code function to get image descriptions via API.
+    - Build UI: Create basic Streamlit app (image upload/view).
+    - Test: Verify image description quality.
+    - Design Graph: Define node/edge structure for map.
+    - Implement Graph: Code graph functions (networkx).
+    - Decide Pose: Choose method for viewpoint position/pose.
+    - Visualize Graph: Add graph display to Streamlit.
+    - Integrate Graph: Link UI uploads to graph building.
+    - Enable Mobile: Implement image upload from phone.
+    - Plan Path: Code LLM function for navigation instructions.
+    - Add Nav UI: Add goal input/instruction display to Streamlit.
+    - Test Path: Verify navigation instruction generation.
+    - Design Replan: Define triggers for replanning.
+    - Code Replan: Implement replanning logic.
+    - Design Obstacle: Define obstacle interaction logic.
+    - Refactor: Clean up Phase 1 code.
+Phase 2: ROS Integration & Simulation
+
+    - Install: ROS & chosen simulator (e.g., Gazebo).
+    - Setup Sim: Create world & spawn robot model (camera).
+    - Test Sim: Verify basic robot teleoperation.
+    - Create ROS Service: LLM image description wrapper.
+    - Create ROS Node: Graph management (map building).
+    - Create ROS Node: Navigation planner (instruction generation).
+    - Decide ROS Nav: Choose Nav2 integration strategy.
+    - Implement ROS Nav: Code interface between planner & Nav2 (handle tf).
+    - Test Full Sim: Run complete loop (perception->plan->action) in sim.
+    - Evaluate: Measure performance against goals.
+    - Document: Write final system documentation.
+
+
+
+
+llm_robot_navigator/              <-- Directorio Raíz del Proyecto
+├── .env                          <-- Archivo para claves API (¡NO SUBIR A GIT!)
+├── .gitignore                    <-- Archivo para ignorar archivos/directorios en Git
+├── requirements.txt              <-- Lista de dependencias Python (pip freeze > requirements.txt)
+├── README.md                     <-- Descripción del proyecto, instrucciones de setup, etc.
+│
+├── src/                          <-- Directorio principal del código fuente Python
+│   ├── __init__.py
+│   ├── api/                      <-- Módulos relacionados con APIs externas (OpenAI)
+│   │   ├── __init__.py
+│   │   └── gpt_client.py
+│   ├── mapping/                  <-- Lógica para crear y manejar el grafo/mapa
+│   │   ├── __init__.py
+│   │   └── graph_manager.py
+│   ├── navigation/               <-- Lógica de planificación de rutas y replanificación
+│   │   ├── __init__.py
+│   │   └── planner.py
+│   ├── interfaces/               <-- Código para interfaces de usuario (Streamlit)
+│   │   ├── __init__.py
+│   │   └── streamlit_app.py      <-- Tu aplicación Streamlit principal
+│   ├── utils/                    <-- Funciones de utilidad compartidas (manejo de imágenes, etc.)
+│   │   ├── __init__.py
+│   │   └── prompts.py
+│   └── main.py                   <-- Punto de entrada principal (si no es la app Streamlit)
+│
+├── ros_ws/                       <-- ROS Workspace (para la Fase 2)
+│   ├── src/                      <-- Directorio 'src' del workspace de ROS
+│   │   ├── llm_robot_pkg/        <-- Tu paquete ROS personalizado
+│   │   │   ├── package.xml
+│   │   │   ├── setup.py          <-- (Para ROS 2 Python)
+│   │   │   ├── CMakeLists.txt    <-- (Si usas C++ o mixto)
+│   │   │   ├── launch/           <-- Archivos de lanzamiento ROS
+│   │   │   │   └── navigation_sim.launch.py
+│   │   │   ├── nodes/            <-- Scripts ejecutables (nodos ROS)
+│   │   │   │   ├── llm_service_node.py
+│   │   │   │   ├── graph_manager_node.py
+│   │   │   │   └── planner_node.py
+│   │   │   └── llm_robot_pkg/    <-- Código Python del paquete (ROS 2)
+│   │   │       ├── __init__.py
+│   │   │       ├── llm_service.py
+│   │   │       ├── graph_node.py
+│   │   │       └── planner_logic.py
+│   │   └── ... (otros paquetes si los usas)
+│
+├── simulation/                   <-- Archivos de configuración de la simulación
+│   ├── worlds/                   <-- Archivos de mundo Gazebo (.world)
+│   ├── models/                   <-- Modelos de robot/objetos (.sdf, .urdf)
+│   └── config/                   <-- Archivos de configuración (Nav2 params, RViz config)
+│
+├── data/                         <-- Datos generados o necesarios (mapas guardados, logs - ¡cuidado con el tamaño en Git!)
+│   └── graphs/                   <-- Grafos guardados
+│
+├── notebooks/                    <-- Jupyter notebooks para experimentación y análisis
+│   └── 01_test_gpt_vision.ipynb
+│
+└── tests/                        <-- Pruebas unitarias e de integración
+    ├── test_api.py
+    └── test_mapping.py

@@ -1,0 +1,13 @@
+# .gitignore
+.qodo
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+*.env
+.DS_Store
+# Otros archivos o directorios que no quieras subir

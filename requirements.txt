@@ -1,0 +1,7 @@
+python-dotenv
+streamlit 
+networkx 
+Pillow 
+streamlit-agraph
+openai
+streamlit-autorefresh
