@@ -40,9 +40,9 @@ def analyze_image_with_gpt(image_source: str, prompt: str = "What's in this imag
                     "content": content,
                 }
             ],
-            max_tokens=1000,  # Adjust as needed
+            max_tokens=1500,  # Adjust as needed
             response_format={"type": "json_object"}, 
-            temperature=0.4,
+            temperature=0.5,
         )
         return response.choices[0].message.content
     except Exception as e:

@@ -14,7 +14,8 @@ navigation_prompt = """You are a navigation AI. Generate STRICTLY a JSON respons
     {"type": "...", "size": "[small/medium/large]", "location": "[relative position]"}
   ],
   "landmarks_and_suggested_node_name": {
-    "suggested_node_name": "[2-4 word unique name]"
+    "suggested_node_name": "[2-4 word unique name]",
+    "suggested_node_name_detailed": "[Detailed description of landmarks to identify this location]"
   },
   "robot_perspective_and_potential_actions": [
     "[Action 1]", "[Action 2]"
@@ -23,7 +24,8 @@ navigation_prompt = """You are a navigation AI. Generate STRICTLY a JSON respons
     {"target_node": "node_name", "action": "[specific movement]"}
   ],
   "reasoning": "[2-3 sentence logical chain]",
-  "obstacle_avoidance_strategy": "[concrete steps]"
+  "obstacle_avoidance_strategy": "[concrete steps]",
+  "process_step": "[e.g., step 1, step 2, step 3]"
 }
 
 RULES:
@@ -35,7 +37,14 @@ RULES:
 6. If uncertain about a field, use empty array []
 
 Current Navigation Goal: {navigation_goal}
-Image Analysis:"""
+Action History (last 5): {action_history}
+
+Image Analysis:
+
+If a wall is detected directly in front of the robot, and there is no clear path forward, suggest the action "girar 180 grados" to analyze the area behind. The robot should remain in its current location while performing this turn.
+
+If the robot has been in a state where the last action was "stop" or if no movement has occurred for a while (consider the action history), analyze the current image in the context of the previous actions and suggest the next logical step to progress towards the navigation goal. Avoid suggesting "stop" repeatedly if the goal has not been reached.
+"""
 
 formatting_prompt = """Repair and validate this JSON. Apply:
 

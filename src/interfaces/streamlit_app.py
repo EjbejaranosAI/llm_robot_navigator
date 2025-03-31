@@ -6,6 +6,8 @@ import os
 import sys
 import json
 import re
+import networkx as nx
+from networkx.readwrite import json_graph
 
 # Ajustar path si fuera necesario
 src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -57,7 +59,66 @@ if 'clicked_node_id' not in st.session_state:
 if 'analyzed_images' not in st.session_state:
     st.session_state.analyzed_images = [] # List of tuples: (node_id, image_data)
 
+
+
+
+
 # --- Funciones auxiliares ---
+def save_state():
+    # Convertimos el grafo a un formato serializable
+    graph_data = json_graph.node_link_data(st.session_state.graph)
+    state = {
+         "graph": graph_data,
+         "current_description": st.session_state.current_description,
+         "current_image": st.session_state.current_image,
+         "navigation_goal": st.session_state.navigation_goal,
+         "current_node": st.session_state.current_node,
+         "all_descriptions": st.session_state.all_descriptions,
+         "navigation_plan": st.session_state.navigation_plan,
+         "action_history": st.session_state.action_history,
+         "llm_components": st.session_state.llm_components,
+         "suggested_action": st.session_state.suggested_action,
+         "analyzed_images": st.session_state.analyzed_images
+    }
+    return state
+
+def load_state(state):
+    # Reconstruimos el grafo desde el formato serializado
+    st.session_state.graph = json_graph.node_link_graph(state["graph"])
+    st.session_state.current_description = state["current_description"]
+    st.session_state.current_image = state["current_image"]
+    st.session_state.navigation_goal = state["navigation_goal"]
+    st.session_state.current_node = state["current_node"]
+    st.session_state.all_descriptions = state["all_descriptions"]
+    st.session_state.navigation_plan = state["navigation_plan"]
+    st.session_state.action_history = state["action_history"]
+    st.session_state.llm_components = state["llm_components"]
+    st.session_state.suggested_action = state["suggested_action"]
+    st.session_state.analyzed_images = state["analyzed_images"]
+# --- Sección para guardar y cargar estado ---
+st.sidebar.header("Guardar / Cargar Estado")
+# Botón para descargar el estado actual
+if st.sidebar.button("Guardar Estado"):
+    state = save_state()
+    state_json = json.dumps(state)
+    st.sidebar.download_button(
+        label="Descargar Estado",
+        data=state_json,
+        file_name="estado_navegacion.json",
+        mime="application/json"
+    )
+
+# File uploader para cargar un estado guardado
+uploaded_state_file = st.sidebar.file_uploader("Cargar Estado Guardado", type="json")
+if uploaded_state_file is not None:
+    try:
+        state_data = json.load(uploaded_state_file)
+        load_state(state_data)
+        st.sidebar.success("Estado cargado exitosamente.")
+        st.experimental_rerun()  # Opcional: forzar rerender del estado actualizado
+    except Exception as e:
+        st.sidebar.error(f"Error al cargar el estado: {e}")
+
 def format_llm_response(raw_response):
     prompt = formatting_prompt.replace('{raw_llm_output}', raw_response)
     return analyze_image_with_gpt(None, prompt)
