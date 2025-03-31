@@ -99,3 +99,14 @@ llm_robot_navigator/              <-- Directorio Raíz del Proyecto
 └── tests/                        <-- Pruebas unitarias e de integración
     ├── test_api.py
     └── test_mapping.py
+
+
+
+
+#THINGS TODO
+[x] Save information of navigation
+[] Identify when goal is achived
+[] Load better images
+[] Load multiple images multiview?
+[] Improve reasoning for navigation 
+[] States ["navigation", "Stop", "Reasoning with previous steps"]
