@@ -27,6 +27,13 @@ from streamlit_agraph import agraph, Config
 
 st.set_page_config(layout="wide", page_title="Navegación Robótica con LLM")
 
+# --- Función auxiliar para reiniciar la app de forma segura ---
+def safe_rerun():
+    try:
+        st.experimental_rerun()
+    except Exception as e:
+        st.warning("No se pudo reiniciar la app automáticamente.")
+
 # --- Estado de sesión ---
 if 'graph' not in st.session_state:
     st.session_state.graph = initialize_graph()
@@ -57,15 +64,10 @@ if 'selected_action' not in st.session_state:
 if 'clicked_node_id' not in st.session_state:
     st.session_state.clicked_node_id = None
 if 'analyzed_images' not in st.session_state:
-    st.session_state.analyzed_images = [] # List of tuples: (node_id, image_data)
+    st.session_state.analyzed_images = []  # List of tuples: (node_id, image_data)
 
-
-
-
-
-# --- Funciones auxiliares ---
+# --- Funciones para guardar/cargar estado ---
 def save_state():
-    # Convertimos el grafo a un formato serializable
     graph_data = json_graph.node_link_data(st.session_state.graph)
     state = {
          "graph": graph_data,
@@ -83,7 +85,6 @@ def save_state():
     return state
 
 def load_state(state):
-    # Reconstruimos el grafo desde el formato serializado
     st.session_state.graph = json_graph.node_link_graph(state["graph"])
     st.session_state.current_description = state["current_description"]
     st.session_state.current_image = state["current_image"]
@@ -95,9 +96,9 @@ def load_state(state):
     st.session_state.llm_components = state["llm_components"]
     st.session_state.suggested_action = state["suggested_action"]
     st.session_state.analyzed_images = state["analyzed_images"]
+
 # --- Sección para guardar y cargar estado ---
 st.sidebar.header("Guardar / Cargar Estado")
-# Botón para descargar el estado actual
 if st.sidebar.button("Guardar Estado"):
     state = save_state()
     state_json = json.dumps(state)
@@ -108,14 +109,13 @@ if st.sidebar.button("Guardar Estado"):
         mime="application/json"
     )
 
-# File uploader para cargar un estado guardado
 uploaded_state_file = st.sidebar.file_uploader("Cargar Estado Guardado", type="json")
 if uploaded_state_file is not None:
     try:
         state_data = json.load(uploaded_state_file)
         load_state(state_data)
         st.sidebar.success("Estado cargado exitosamente.")
-        st.experimental_rerun()  # Opcional: forzar rerender del estado actualizado
+        safe_rerun()
     except Exception as e:
         st.sidebar.error(f"Error al cargar el estado: {e}")
 
@@ -128,10 +128,7 @@ def extract_llm_components(llm_response):
         json_str = re.search(r'^\s*\{.*\}\s*$', llm_response, re.DOTALL)
         if not json_str:
             raise ValueError("No JSON found")
-
         parsed = json.loads(json_str.group())
-
-        # Validar estructura básica
         required_keys = [
             "overall_scene_description",
             "identified_objects",
@@ -140,24 +137,18 @@ def extract_llm_components(llm_response):
             "landmarks_and_suggested_node_name",
             "robot_perspective_and_potential_actions"
         ]
-
         for key in required_keys:
             if key not in parsed:
                 parsed[key] = [] if key.endswith('s') else {}
-
-        # Sanitizar nombres de nodos
         node_name = parsed["landmarks_and_suggested_node_name"].get("suggested_node_name", "")
         if node_name:
             parsed["landmarks_and_suggested_node_name"]["suggested_node_name"] = (
                 node_name.replace(" ", "_").replace(",", "").strip("_")
             )
-
         return parsed
-
     except Exception as e:
         st.error(f"JSON Decoding Error: {str(e)}")
         st.error(f"Raw Response: {llm_response[:500]}...")
-
         try:
             fixed_response = re.sub(r'(?<!\\)\'(?!\\))', '"', llm_response)
             fixed_response = re.sub(r"(\w+):", r'"\1":', fixed_response)
@@ -165,30 +156,69 @@ def extract_llm_components(llm_response):
         except:
             return parse_raw_text_to_json(llm_response)
 
-# --- Layout Compacto ---
+# --- Funciones adicionales ---
+def connect_nodes_by_common_objects(graph, new_node_name, new_llm_components):
+    """
+    Revisa los objetos identificados en el nuevo nodo y los compara con los de los nodos existentes.
+    Si hay objetos en común, se añade una conexión (arista) con un label que indique los objetos compartidos.
+    """
+    new_objs_raw = new_llm_components.get("identified_objects", [])
+    new_objects = set()
+    for obj in new_objs_raw:
+        if isinstance(obj, dict):
+            new_objects.add(obj.get("name", json.dumps(obj, sort_keys=True)))
+        else:
+            new_objects.add(obj)
+    
+    for existing_node, data in graph.nodes(data=True):
+        if existing_node == new_node_name:
+            continue
+        existing_objs_raw = data.get("llm_json", {}).get("identified_objects", [])
+        existing_objects = set()
+        for obj in existing_objs_raw:
+            if isinstance(obj, dict):
+                existing_objects.add(obj.get("name", json.dumps(obj, sort_keys=True)))
+            else:
+                existing_objects.add(obj)
+        common_objects = new_objects.intersection(existing_objects)
+        if common_objects:
+            action_label = f"Conexión por: {', '.join(common_objects)}"
+            if not graph.has_edge(existing_node, new_node_name):
+                add_edge_to_graph(graph, existing_node, new_node_name, action_label)
+                st.info(f"Conectado '{existing_node}' a '{new_node_name}' por objetos: {', '.join(common_objects)}")
+
+def check_goal_reached(llm_response, current_node, navigation_goal):
+    """
+    Si en la respuesta del LLM se detectan palabras clave que indiquen llegada al destino
+    o si el nodo actual coincide con el goal, se muestra un mensaje de éxito.
+    """
+    llm_lower = llm_response.lower()
+    if ("llegado" in llm_lower or "destino alcanzado" in llm_lower) or (current_node == navigation_goal and navigation_goal):
+        st.success(f"¡Has llegado al destino: {navigation_goal}!")
+
+# --- Layout Principal ---
 st.title("Interfaz de Navegación Robótica con LLM")
 
 # Botón para iniciar una nueva navegación
 if st.button("Iniciar Nueva Navegación"):
-    print("Iniciar Nueva Navegación button pressed")
-    if 'graph' in st.session_state:  # Check if session state is initialized
-        print("Session state 'graph' exists. Performing reset and rerun.")
+    st.write("Iniciar Nueva Navegación button pressed")
+    if 'graph' in st.session_state:
+        st.write("Session state 'graph' exists. Performing reset and rerun.")
         st.session_state.current_node = None
         st.session_state.action_history = []
         st.session_state.graph = initialize_graph()
         st.session_state.analyzed_images = []
         st.session_state.clicked_node_id = None
         st.session_state.navigation_plan = ""
-        st.rerun()
+        safe_rerun()
     else:
-        print("Session state 'graph' does not exist (initial load?). Performing reset.")
+        st.write("Session state 'graph' does not exist. Performing reset.")
         st.session_state.current_node = None
         st.session_state.action_history = []
         st.session_state.graph = initialize_graph()
         st.session_state.analyzed_images = []
         st.session_state.clicked_node_id = None
         st.session_state.navigation_plan = ""
-        # No st.rerun() here for the very first load
 
 # Sección superior: Entrada de imagen y análisis
 with st.container():
@@ -238,22 +268,18 @@ with st.container():
                     if st.session_state.llm_components:
                         suggested_node_name = st.session_state.llm_components.get(
                             "landmarks_and_suggested_node_name", {}
-                        ).get("suggested_node_name", "Ubicación Desconocida")
+                        ).get("suggested_node_name", "Ubicación_Desconocida")
                         suggested_actions = st.session_state.llm_components.get(
                             "robot_perspective_and_potential_actions", []
                         )
-                        if suggested_node_name == "Ubicación Desconocida":
+                        if suggested_node_name == "Ubicación_Desconocida":
                             if st.session_state.graph.number_of_nodes() == 0:
                                 suggested_node_name = "Inicio"
                             else:
                                 suggested_node_name = f"Visitado_{st.session_state.graph.number_of_nodes() + 1}"
-
-                        # If current_node is None, set it to the suggested node name
                         if st.session_state.current_node is None:
                             st.session_state.current_node = suggested_node_name
-
-                        description = st.session_state.llm_components.get("overall_scene_description", "") # Define description here
-
+                        description = st.session_state.llm_components.get("overall_scene_description", "")
                         if suggested_node_name not in st.session_state.graph:
                             node_data = {
                                 "description": description,
@@ -263,9 +289,9 @@ with st.container():
                             add_node_to_graph(st.session_state.graph, suggested_node_name, node_data)
                             if suggested_node_name not in st.session_state.all_descriptions:
                                 st.session_state.all_descriptions[suggested_node_name] = description
-                            st.session_state.analyzed_images.append((suggested_node_name, image_data)) # Store analyzed image
+                            st.session_state.analyzed_images.append((suggested_node_name, image_data))
                             if st.session_state.current_node != suggested_node_name and st.session_state.current_node in st.session_state.graph:
-                                st.info("Selecciona la acción para conectar nodos.")
+                                st.info("Selecciona la acción para conectar nodos manualmente.")
                                 if suggested_actions:
                                     chosen_action = st.selectbox("Acción sugerida:", suggested_actions)
                                 else:
@@ -276,15 +302,15 @@ with st.container():
                                     add_edge_to_graph(st.session_state.graph, st.session_state.current_node, suggested_node_name, action_to_add)
                                     st.session_state.action_history.append(action_to_add)
                                     st.session_state.current_node = suggested_node_name
+                            connect_nodes_by_common_objects(st.session_state.graph, suggested_node_name, st.session_state.llm_components)
                         else:
-                            # Update the node data for existing nodes
                             node_data = {
                                 "description": description,
                                 "image": image_data,
                                 "llm_json": st.session_state.llm_components
                             }
                             update_node_data(st.session_state.graph, suggested_node_name, node_data)
-                            st.session_state.analyzed_images.append((suggested_node_name, image_data)) # Store analyzed image
+                            st.session_state.analyzed_images.append((suggested_node_name, image_data))
                             if st.session_state.current_node != suggested_node_name:
                                 if suggested_actions:
                                     chosen_action = st.selectbox("Acción sugerida:", suggested_actions)
@@ -296,11 +322,8 @@ with st.container():
                                     add_edge_to_graph(st.session_state.graph, st.session_state.current_node, suggested_node_name, action_to_add)
                                     st.session_state.action_history.append(action_to_add)
                                     st.session_state.current_node = suggested_node_name
-
-                        # Check if destination is reached
-                        if st.session_state.current_node == st.session_state.navigation_goal and st.session_state.navigation_goal:
-                            st.success(f"¡Has llegado al destino: {st.session_state.navigation_goal}!")
-
+                            connect_nodes_by_common_objects(st.session_state.graph, suggested_node_name, st.session_state.llm_components)
+                        check_goal_reached(st.session_state.current_description, st.session_state.current_node, st.session_state.navigation_goal)
                     else:
                         st.warning("No se obtuvo respuesta parseable del LLM.")
             else:
@@ -314,9 +337,7 @@ with st.container():
                 return_val = agraph(nodes=agraph_nodes_preview, edges=agraph_edges_preview, config=config_preview)
                 if return_val and 'clicked_node_id' in return_val:
                     st.session_state.clicked_node_id = return_val['clicked_node_id']
-
         node_id_to_display = st.session_state.clicked_node_id if st.session_state.clicked_node_id else st.session_state.current_node
-
         if node_id_to_display:
             col_img_prev, col_info_prev = st.columns([1, 2])
             with col_img_prev:
@@ -334,8 +355,6 @@ with st.container():
                     st.json(node_info.get("llm_json", {}))
         else:
             st.info("Selecciona un nodo del grafo o analiza una imagen.")
-
-        # History of analyzed images
         st.subheader("Historial de Imágenes Analizadas")
         if st.session_state.analyzed_images:
             cols = st.columns(len(st.session_state.analyzed_images))
@@ -345,8 +364,7 @@ with st.container():
                         st.image(img_data, caption=f"#{i+1}: {node_id}", width=100, use_container_width=False)
                         if st.button(f"Ver #{i+1}", key=f"view_image_{i}"):
                             st.session_state.clicked_node_id = node_id
-                            # Force a re-render to update the preview
-                            st.rerun()
+                            safe_rerun()
                     else:
                         st.write(f"Imagen #{i+1}: {node_id} (sin datos)")
         else:
@@ -388,13 +406,11 @@ with st.container():
                         st.session_state.action_history.append(auto_action)
                         st.success(f"Acción '{auto_action}' seleccionada automáticamente.")
                         st.session_state.timer_start = None
-                        st.rerun()
+                        safe_rerun()
             else:
                 st.session_state.timer_start = None
         else:
             st.info("No hay acciones sugeridas. Analiza una imagen primero.")
-
-        # Sección mejorada para generación de plan
         if st.session_state.graph.number_of_edges() > 0 and st.session_state.current_node and st.session_state.navigation_goal:
             if st.button("Generar/Actualizar Plan de Navegación"):
                 with st.spinner("Generando plan..."):
@@ -406,7 +422,7 @@ with st.container():
                             st.session_state.all_descriptions,
                             st.session_state.action_history
                         )
-                        st.rerun()
+                        safe_rerun()
                     except Exception as e:
                         st.error(f"Error generando plan: {str(e)}")
             if st.session_state.navigation_plan:
@@ -421,10 +437,8 @@ with st.container():
                 required_conditions.append("nodo actual definido")
             if not st.session_state.navigation_goal:
                 required_conditions.append("objetivo de navegación establecido")
-
             if required_conditions:
                 st.info(f"Requerido para generar plan: {', '.join(required_conditions)}")
-
         with st.expander("Historial de Acciones"):
             if st.session_state.action_history:
                 for i, action in enumerate(st.session_state.action_history, 1):
